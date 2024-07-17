@@ -1,0 +1,26 @@
+[package]
+name = "lapack-array2"
+version = "0.1.0"
+edition = "2021"
+description = "Implementation of parameter-optional LAPACK wrapper by ndarray::Array (Ix1 or Ix2)."
+repository = "https://github.com/ajz34/lapack-array2"
+keywords = ["array", "data-structure", "matrix", "blas"]
+categories = ["data-structures", "science"]
+
+[dependencies]
+num-traits = { version = "0.2" }
+derive_builder = { version = "0.20" }
+ndarray = { version = "0.15" }
+num-complex = { version = "0.4" }
+blas-array2 = { version = "0.1" }
+
+[dev-dependencies]
+rand = { version = "0.8" }
+itertools = { version = "0.13" }
+approx = { version = "0.5" }
+cblas-sys = { version = "0.1" }
+
+[features]
+default = []
+std = []
+ilp64 = []
