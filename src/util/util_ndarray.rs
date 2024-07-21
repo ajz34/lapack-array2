@@ -79,6 +79,14 @@ where
             },
         }
     }
+
+    pub fn get_data_mut_ptr(&mut self) -> *mut F {
+        match self {
+            Self::ViewMut(arr) => arr.as_mut_ptr(),
+            Self::Owned(arr) => arr.as_mut_ptr(),
+            Self::ToBeCloned(_, arr) => arr.as_mut_ptr(),
+        }
+    }
 }
 
 pub type ArrayOut1<'a, F> = ArrayOut<'a, F, Ix1>;
@@ -116,6 +124,146 @@ pub fn get_layout_array2<F>(arr: &ArrayView2<F>) -> LapackLayout {
     } else {
         // non-contiguous
         return LapackLayout::NonContiguous;
+    }
+}
+
+/* #endregion */
+
+/* #region flip */
+
+pub(crate) fn flip_trans_fpref<'a, F>(
+    trans: LapackTranspose,
+    view: &'a ArrayView2<F>,
+    view_t: &'a ArrayView2<F>,
+    hermi: bool,
+) -> Result<(LapackTranspose, CowArray<'a, F, Ix2>), LapackError>
+where
+    F: LapackFloat,
+{
+    if view.is_fpref() {
+        return Ok((trans, view.to_col_layout()?));
+    } else {
+        match trans {
+            LapackNoTrans => Ok((
+                trans.flip(hermi),
+                match hermi {
+                    false => view_t.to_col_layout()?,
+                    true => {
+                        lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
+                        CowArray::from(view.mapv(F::conj).reversed_axes())
+                    },
+                },
+            )),
+            LapackTrans => Ok((trans.flip(hermi), view_t.to_col_layout()?)),
+            LapackConjTrans => Ok((trans.flip(hermi), {
+                lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
+                CowArray::from(view.mapv(F::conj).reversed_axes())
+            })),
+            _ => lapack_invalid!(trans),
+        }
+    }
+}
+
+pub(crate) fn flip_trans_cpref<'a, F>(
+    trans: LapackTranspose,
+    view: &'a ArrayView2<F>,
+    view_t: &'a ArrayView2<F>,
+    hermi: bool,
+) -> Result<(LapackTranspose, CowArray<'a, F, Ix2>), LapackError>
+where
+    F: LapackFloat,
+{
+    if view.is_cpref() {
+        return Ok((trans, view.to_row_layout()?));
+    } else {
+        match trans {
+            LapackNoTrans => Ok((
+                trans.flip(hermi),
+                match hermi {
+                    false => view_t.to_row_layout()?,
+                    true => {
+                        lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
+                        CowArray::from(view_t.mapv(F::conj))
+                    },
+                },
+            )),
+            LapackTrans => Ok((trans.flip(hermi), view_t.to_row_layout()?)),
+            LapackConjTrans => Ok((trans.flip(hermi), {
+                lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
+                CowArray::from(view_t.mapv(F::conj))
+            })),
+            _ => lapack_invalid!(trans),
+        }
+    }
+}
+
+/* #endregion */
+
+/* #region contiguous preference */
+
+pub(crate) trait LayoutPref {
+    fn is_fpref(&self) -> bool;
+    fn is_cpref(&self) -> bool;
+}
+
+impl<A> LayoutPref for ArrayView2<'_, A> {
+    fn is_fpref(&self) -> bool {
+        get_layout_array2(self).is_fpref()
+    }
+
+    fn is_cpref(&self) -> bool {
+        get_layout_array2(self).is_cpref()
+    }
+}
+
+/* #endregion */
+
+/* #region warn on clone */
+
+pub(crate) trait ToLayoutCowArray2<A> {
+    fn to_row_layout(&self) -> Result<CowArray<'_, A, Ix2>, LapackError>;
+    fn to_col_layout(&self) -> Result<CowArray<'_, A, Ix2>, LapackError>;
+}
+
+impl<A> ToLayoutCowArray2<A> for ArrayView2<'_, A>
+where
+    A: Clone,
+{
+    fn to_row_layout(&self) -> Result<CowArray<'_, A, Ix2>, LapackError> {
+        if self.is_cpref() {
+            Ok(CowArray::from(self))
+        } else {
+            lapack_warn_layout_clone!(self)?;
+            let owned = self.into_owned();
+            Ok(CowArray::from(owned))
+        }
+    }
+
+    fn to_col_layout(&self) -> Result<CowArray<'_, A, Ix2>, LapackError> {
+        if self.is_fpref() {
+            Ok(CowArray::from(self))
+        } else {
+            lapack_warn_layout_clone!(self)?;
+            let owned = self.t().into_owned().reversed_axes();
+            Ok(CowArray::from(owned))
+        }
+    }
+}
+
+pub(crate) trait ToLayoutCowArray1<A> {
+    fn to_seq_layout(&self) -> Result<CowArray<'_, A, Ix1>, LapackError>;
+}
+
+impl<A> ToLayoutCowArray1<A> for ArrayView1<'_, A>
+where
+    A: Clone,
+{
+    fn to_seq_layout(&self) -> Result<CowArray<'_, A, Ix1>, LapackError> {
+        let cow = self.as_standard_layout();
+        if cow.is_owned() {
+            lapack_warn_layout_clone!(self)?;
+        }
+        Ok(cow)
     }
 }
 

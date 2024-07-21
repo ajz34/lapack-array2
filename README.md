@@ -6,9 +6,8 @@ Implementation of parameter-optional LAPACK wrapper by `ndarray::Array` (`Ix1` o
 
 **This is work-in-progress.**
 
-For BLAS2 and BLAS3 wrapper, also see <https://github.com/ajz34/blas-array2>. Crate `blas-array2` is already applicable to real projects.
-
-Since number of LAPACK functions is quite a lot, a few LAPACK functions will be implemented in priority.
+- **Code Conventions**: For BLAS2 and BLAS3 wrapper, also see <https://github.com/ajz34/blas-array2>. Crate `blas-array2` is already applicable to real projects.
+- **Implementation Priorities**: Since number of LAPACK functions is quite a lot, a few LAPACK functions will be implemented in different priorities.
 
 ## Acknowledges
 

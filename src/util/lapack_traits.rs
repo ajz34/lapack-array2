@@ -6,10 +6,17 @@ pub type c32 = Complex<f32>;
 #[allow(non_camel_case_types)]
 pub type c64 = Complex<f64>;
 
+#[allow(bad_style)]
+pub type c_double_complex = [f64; 2];
+#[allow(bad_style)]
+pub type c_float_complex = [f32; 2];
+
+/// Trait for defining real part float types
 pub trait LapackFloat:
     Num + NumAssignOps + Send + Sync + Copy + Clone + Default + core::fmt::Debug + core::fmt::Display
 {
     type RealFloat: LapackFloat;
+    type FFIFloat;
     const EPSILON: Self::RealFloat;
     fn is_complex() -> bool;
     fn conj(x: Self) -> Self;
@@ -18,6 +25,7 @@ pub trait LapackFloat:
 
 impl LapackFloat for f32 {
     type RealFloat = f32;
+    type FFIFloat = f32;
     const EPSILON: Self::RealFloat = f32::EPSILON;
     #[inline]
     fn is_complex() -> bool {
@@ -35,6 +43,7 @@ impl LapackFloat for f32 {
 
 impl LapackFloat for f64 {
     type RealFloat = f64;
+    type FFIFloat = f64;
     const EPSILON: Self::RealFloat = f64::EPSILON;
     #[inline]
     fn is_complex() -> bool {
@@ -52,6 +61,7 @@ impl LapackFloat for f64 {
 
 impl LapackFloat for c32 {
     type RealFloat = f32;
+    type FFIFloat = c_float_complex;
     const EPSILON: Self::RealFloat = f32::EPSILON;
     #[inline]
     fn is_complex() -> bool {
@@ -69,6 +79,7 @@ impl LapackFloat for c32 {
 
 impl LapackFloat for c64 {
     type RealFloat = f64;
+    type FFIFloat = c_double_complex;
     const EPSILON: Self::RealFloat = f64::EPSILON;
     #[inline]
     fn is_complex() -> bool {
@@ -130,8 +141,3 @@ where
         true
     }
 }
-
-/// Marker struct of Lapack functions.
-///
-/// This struct will be implemented in modules of each function.
-pub struct LapackFunc {}

@@ -12,7 +12,6 @@ num-traits = { version = "0.2" }
 derive_builder = { version = "0.20" }
 ndarray = { version = "0.15" }
 num-complex = { version = "0.4" }
-blas-array2 = { version = "0.1" }
 
 [dev-dependencies]
 rand = { version = "0.8" }
@@ -21,6 +20,6 @@ approx = { version = "0.5" }
 cblas-sys = { version = "0.1" }
 
 [features]
-default = []
+default = ["std"]
 std = []
 ilp64 = []
