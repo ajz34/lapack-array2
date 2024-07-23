@@ -1,5 +1,9 @@
+#[allow(unused)]
+
 use crate::util::*;
 use ndarray::prelude::*;
+
+/* #region ArrayOut */
 
 #[derive(Debug)]
 pub enum ArrayOut<'a, F, D>
@@ -93,6 +97,74 @@ pub type ArrayOut1<'a, F> = ArrayOut<'a, F, Ix1>;
 pub type ArrayOut2<'a, F> = ArrayOut<'a, F, Ix2>;
 pub type ArrayOut3<'a, F> = ArrayOut<'a, F, Ix3>;
 
+pub trait ArrayOutTuple2<F1, D1, F2, D2> {
+    fn into_owned(self) -> (Array<F1, D1>, Array<F2, D2>);
+}
+
+impl<F1, D1, F2, D2> ArrayOutTuple2<F1, D1, F2, D2> for (ArrayOut<'_, F1, D1>, ArrayOut<'_, F2, D2>)
+where
+    F1: Clone,
+    F2: Clone,
+    D1: Dimension,
+    D2: Dimension,
+{
+    fn into_owned(self) -> (Array<F1, D1>, Array<F2, D2>) {
+        (self.0.into_owned(), self.1.into_owned())
+    }
+}
+
+/* #endregion */
+
+/* #region ArrayViewOrMut */
+
+pub enum ArrayViewOrMut<'a, F, D>
+where
+    D: Dimension,
+{
+    View(ArrayView<'a, F, D>),
+    ViewMut(ArrayViewMut<'a, F, D>),
+}
+
+pub type ArrayViewOrMut1<'a, F> = ArrayViewOrMut<'a, F, Ix1>;
+pub type ArrayViewOrMut2<'a, F> = ArrayViewOrMut<'a, F, Ix2>;
+
+impl<'a, F, D> ArrayViewOrMut<'a, F, D>
+where
+    D: Dimension,
+{
+    pub fn view(&self) -> ArrayView<'_, F, D> {
+        match self {
+            Self::View(arr) => arr.view(),
+            Self::ViewMut(arr) => arr.view(),
+        }
+    }
+
+    pub fn reversed_axes(self) -> Self {
+        match self {
+            Self::View(arr) => Self::View(arr.reversed_axes()),
+            Self::ViewMut(arr) => Self::ViewMut(arr.reversed_axes()),
+        }
+    }
+}
+
+impl<'a, F, D> From<ArrayViewMut<'a, F, D>> for ArrayViewOrMut<'a, F, D>
+where
+    D: Dimension,
+{
+    fn from(arr: ArrayViewMut<'a, F, D>) -> Self {
+        Self::ViewMut(arr)
+    }
+}
+
+impl<'a, F, D> From<ArrayView<'a, F, D>> for ArrayViewOrMut<'a, F, D>
+where
+    D: Dimension,
+{
+    fn from(arr: ArrayView<'a, F, D>) -> Self {
+        Self::View(arr)
+    }
+}
+
 /* #endregion */
 
 /* #region Strides */
@@ -124,76 +196,6 @@ pub fn get_layout_array2<F>(arr: &ArrayView2<F>) -> LapackLayout {
     } else {
         // non-contiguous
         return LapackLayout::NonContiguous;
-    }
-}
-
-/* #endregion */
-
-/* #region flip */
-
-pub(crate) fn flip_trans_fpref<'a, F>(
-    trans: LapackTranspose,
-    view: &'a ArrayView2<F>,
-    view_t: &'a ArrayView2<F>,
-    hermi: bool,
-) -> Result<(LapackTranspose, CowArray<'a, F, Ix2>), LapackError>
-where
-    F: LapackFloat,
-{
-    if view.is_fpref() {
-        return Ok((trans, view.to_col_layout()?));
-    } else {
-        match trans {
-            LapackNoTrans => Ok((
-                trans.flip(hermi),
-                match hermi {
-                    false => view_t.to_col_layout()?,
-                    true => {
-                        lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
-                        CowArray::from(view.mapv(F::conj).reversed_axes())
-                    },
-                },
-            )),
-            LapackTrans => Ok((trans.flip(hermi), view_t.to_col_layout()?)),
-            LapackConjTrans => Ok((trans.flip(hermi), {
-                lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
-                CowArray::from(view.mapv(F::conj).reversed_axes())
-            })),
-            _ => lapack_invalid!(trans),
-        }
-    }
-}
-
-pub(crate) fn flip_trans_cpref<'a, F>(
-    trans: LapackTranspose,
-    view: &'a ArrayView2<F>,
-    view_t: &'a ArrayView2<F>,
-    hermi: bool,
-) -> Result<(LapackTranspose, CowArray<'a, F, Ix2>), LapackError>
-where
-    F: LapackFloat,
-{
-    if view.is_cpref() {
-        return Ok((trans, view.to_row_layout()?));
-    } else {
-        match trans {
-            LapackNoTrans => Ok((
-                trans.flip(hermi),
-                match hermi {
-                    false => view_t.to_row_layout()?,
-                    true => {
-                        lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
-                        CowArray::from(view_t.mapv(F::conj))
-                    },
-                },
-            )),
-            LapackTrans => Ok((trans.flip(hermi), view_t.to_row_layout()?)),
-            LapackConjTrans => Ok((trans.flip(hermi), {
-                lapack_warn_layout_clone!(view_t, "Perform element-wise conjugate to matrix")?;
-                CowArray::from(view_t.mapv(F::conj))
-            })),
-            _ => lapack_invalid!(trans),
-        }
     }
 }
 
@@ -264,6 +266,70 @@ where
             lapack_warn_layout_clone!(self)?;
         }
         Ok(cow)
+    }
+}
+
+pub(crate) trait ToSeqArrayOut1<'a, A> {
+    fn into_seq_array_out(self) -> ArrayOut1<'a, A>;
+}
+
+impl<'a, F> ToSeqArrayOut1<'a, F> for ArrayViewOrMut1<'a, F>
+where
+    F: Clone,
+{
+    fn into_seq_array_out(self) -> ArrayOut1<'a, F> {
+        match self {
+            Self::View(arr) => ArrayOut::Owned(arr.to_owned()),
+            Self::ViewMut(arr) => {
+                if arr.is_standard_layout() {
+                    ArrayOut::ViewMut(arr)
+                } else {
+                    lapack_warn_layout_clone!(arr);
+                    let arr_own = arr.view().to_owned();
+                    ArrayOut::ToBeCloned(arr, arr_own)
+                }
+            },
+        }
+    }
+}
+
+pub(crate) trait ToSeqArrayOut2<'a, A> {
+    fn into_row_array_out(self) -> ArrayOut2<'a, A>;
+    fn into_col_array_out(self) -> ArrayOut2<'a, A>;
+}
+
+impl<'a, F> ToSeqArrayOut2<'a, F> for ArrayViewOrMut2<'a, F>
+where
+    F: Clone,
+{
+    fn into_row_array_out(self) -> ArrayOut2<'a, F> {
+        match self {
+            Self::View(arr) => ArrayOut::Owned(arr.as_standard_layout().to_owned()),
+            Self::ViewMut(arr) => {
+                if arr.view().is_cpref() {
+                    ArrayOut::ViewMut(arr)
+                } else {
+                    lapack_warn_layout_clone!(arr);
+                    let arr_own = arr.view().as_standard_layout().to_owned();
+                    ArrayOut::ToBeCloned(arr, arr_own)
+                }
+            },
+        }
+    }
+
+    fn into_col_array_out(self) -> ArrayOut2<'a, F> {
+        match self {
+            Self::View(arr) => ArrayOut::Owned(arr.t().as_standard_layout().into_owned().reversed_axes()),
+            Self::ViewMut(arr) => {
+                if arr.view().is_fpref() {
+                    ArrayOut::ViewMut(arr)
+                } else {
+                    lapack_warn_layout_clone!(arr);
+                    let arr_own = arr.t().as_standard_layout().into_owned().reversed_axes();
+                    ArrayOut::ToBeCloned(arr, arr_own)
+                }
+            },
+        }
     }
 }
 

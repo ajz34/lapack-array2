@@ -5,5 +5,6 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod ffi;
+pub mod prelude;
 pub mod symmetric_eigenvalues;
 pub mod util;

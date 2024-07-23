@@ -15,6 +15,7 @@ pub enum LapackError {
     FailedCheck(String),
     UninitializedField(&'static str),
     ExplicitCopy(String),
+    RuntimeError(String),
     Info(i64),
     Miscellaneous(String),
 }
@@ -127,6 +128,32 @@ macro_rules! lapack_invalid {
         let mut s = String::from(concat!(file!(), ":", line!(), ": ", "LapackError::InvalidFlag", " : "));
         write!(s, "{:?} = {:?}", stringify!($word), $word).unwrap();
         Err(LapackError::InvalidFlag(s))
+    }};
+    ($word:expr, $keyword:tt) => {{
+        extern crate alloc;
+        use alloc::string::String;
+        use core::fmt::Write;
+        let mut s =
+            String::from(concat!(file!(), ":", line!(), ": ", "LapackError::InvalidFlag ", $keyword, " : "));
+        write!(s, "{:?} = {:?}", stringify!($word), $word).unwrap();
+        Err(LapackError::InvalidFlag(s))
+    }};
+}
+
+#[macro_export]
+macro_rules! lapack_check_flag {
+    ($word:expr, [$($poss:expr),+]) => {{
+        extern crate alloc;
+        use alloc::string::String;
+        use core::fmt::Write;
+        match $word {
+            $($poss)|+ => Ok(()),
+            _ => {
+                let mut s = String::from(concat!(file!(), ":", line!(), ": ", "LapackError::InvalidFlag", " : "));
+                write!(s, "{:?} = {:?}, where valid values are {:?}", stringify!($word), $word, [$($poss),+]).unwrap();
+                Err(LapackError::InvalidFlag(s))
+            }
+        }
     }};
 }
 

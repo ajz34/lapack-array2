@@ -1,3 +1,4 @@
+use crate::util::LapackError;
 use num_complex::*;
 use num_traits::*;
 
@@ -11,16 +12,21 @@ pub type c_double_complex = [f64; 2];
 #[allow(bad_style)]
 pub type c_float_complex = [f32; 2];
 
+pub trait LapackFunc {
+    unsafe fn run_lapack(&mut self) -> Result<(), LapackError>;
+}
+
 /// Trait for defining real part float types
 pub trait LapackFloat:
     Num + NumAssignOps + Send + Sync + Copy + Clone + Default + core::fmt::Debug + core::fmt::Display
 {
-    type RealFloat: LapackFloat;
+    type RealFloat: LapackFloat + Float;
     type FFIFloat;
     const EPSILON: Self::RealFloat;
     fn is_complex() -> bool;
     fn conj(x: Self) -> Self;
     fn abs(x: Self) -> Self::RealFloat;
+    fn ftoi(x: Self) -> isize;
 }
 
 impl LapackFloat for f32 {
@@ -38,6 +44,10 @@ impl LapackFloat for f32 {
     #[inline]
     fn abs(x: Self) -> Self::RealFloat {
         x.abs()
+    }
+    #[inline]
+    fn ftoi(x: Self) -> isize {
+        x as isize
     }
 }
 
@@ -57,6 +67,10 @@ impl LapackFloat for f64 {
     fn abs(x: Self) -> Self::RealFloat {
         x.abs()
     }
+    #[inline]
+    fn ftoi(x: Self) -> isize {
+        x as isize
+    }
 }
 
 impl LapackFloat for c32 {
@@ -74,6 +88,10 @@ impl LapackFloat for c32 {
     #[inline]
     fn abs(x: Self) -> Self::RealFloat {
         x.abs()
+    }
+    #[inline]
+    fn ftoi(x: Self) -> isize {
+        x.re as isize
     }
 }
 
@@ -93,51 +111,8 @@ impl LapackFloat for c64 {
     fn abs(x: Self) -> Self::RealFloat {
         x.abs()
     }
-}
-
-/// Trait marker for complex symmetry (whether it is symmetric or hermitian)
-pub trait LapackSymmetric {
-    type Float: LapackFloat;
-    type HermitianFloat: LapackFloat;
-    fn is_hermitian() -> bool;
-}
-
-/// Struct marker for symmetric matrix
-pub struct LapackSymm<F>
-where
-    F: LapackFloat,
-{
-    _phantom: core::marker::PhantomData<F>,
-}
-
-impl<F> LapackSymmetric for LapackSymm<F>
-where
-    F: LapackFloat,
-{
-    type Float = F;
-    type HermitianFloat = F;
     #[inline]
-    fn is_hermitian() -> bool {
-        false
-    }
-}
-
-/// Struct marker for hermitian matrix
-pub struct LapackHermi<F>
-where
-    F: LapackFloat,
-{
-    _phantom: core::marker::PhantomData<F>,
-}
-
-impl<F> LapackSymmetric for LapackHermi<F>
-where
-    F: LapackFloat,
-{
-    type Float = F;
-    type HermitianFloat = <F as LapackFloat>::RealFloat;
-    #[inline]
-    fn is_hermitian() -> bool {
-        true
+    fn ftoi(x: Self) -> isize {
+        x.re as isize
     }
 }
